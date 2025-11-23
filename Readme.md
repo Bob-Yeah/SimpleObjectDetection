@@ -1,0 +1,9 @@
+拍摄一系列包含目标物体的图片，构建一个图片集
+
+使用image_mask_generator.py生成mask
+
+利用原图和mask，统计前景的颜色直方图，使用buildColorHistogram.py脚本
+
+利用颜色直方图来分割目标物体，使用segmentation_by_histogram.py脚本
+
+也可以直接用video_stream_segmentation.py脚本进行视频流分割
