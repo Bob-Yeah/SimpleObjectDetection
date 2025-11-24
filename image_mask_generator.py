@@ -85,17 +85,33 @@ class ImageMaskGenerator:
         if mask is None:
             return False
         
-        # 生成保存路径
-        base_name = os.path.basename(self.image_path)
-        name_without_ext = os.path.splitext(base_name)[0]
-        mask_path = os.path.join(self.mask_output_dir, f"{name_without_ext}_mask.png")
-        
-        # 保存mask
-        if cv2.imwrite(mask_path, mask):
-            print(f"Mask已保存到: {mask_path}")
+        try:
+            # 生成保存路径
+            base_name = os.path.basename(self.image_path)
+            name_without_ext = os.path.splitext(base_name)[0]
+            # 先使用.bin后缀保存
+            temp_mask_path = os.path.join(self.mask_output_dir, f"{name_without_ext}_mask.bin")
+            # 最终的.png路径
+            final_mask_path = os.path.join(self.mask_output_dir, f"{name_without_ext}_mask.png")
+            
+            # 先使用.bin后缀保存
+            temp_filename = temp_mask_path
+
+            # 使用内存缓冲区的方式保存图像
+            # 先将图像编码为JPEG格式的内存数据
+            success, buffer = cv2.imencode('.jpg', mask)
+            if not success:
+                print("错误：无法将图像编码为JPEG格式")
+                return False
+            
+            # 将内存中的JPEG数据写入到.bin文件
+            with open(temp_filename, 'wb') as f:
+                f.write(buffer)
+            
+            print(f"图像已保存: {temp_filename}")
             return True
-        else:
-            print(f"无法保存mask: {mask_path}")
+        except Exception as e:
+            print(f"保存mask过程中发生错误: {str(e)}")
             return False
     
     def process_image(self):

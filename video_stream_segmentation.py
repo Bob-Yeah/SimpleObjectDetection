@@ -211,8 +211,9 @@ def main():
     主函数：设置参数并启动视频流处理
     """
     # 文件路径设置
-    foreground_hist_path = "d:/Projects/DetectionColorHistogram/foreground_histogram.npy"
-    background_hist_path = "d:/Projects/DetectionColorHistogram/background_histogram.npy"
+    foreground_hist_path = "foreground_histogram.npy"
+    background_hist_path = "background_histogram.npy"
+
     
     # 视频处理参数
     camera_id = 0  # 使用默认摄像头
