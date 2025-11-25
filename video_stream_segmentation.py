@@ -116,6 +116,8 @@ def overlay_heatmap_on_image(image, probability_map, alpha=0.5):
 
 def process_video_stream(foreground_hist_path, background_hist_path, camera_id=0, 
                         display_original=True, display_heatmap=True, display_overlay=True,
+                        display_canny=True, canny_threshold1=50, canny_threshold2=150,
+                        display_contour=True, contour_threshold_percentile=90,
                         resize_width=None, resize_height=None, alpha=0.5):
     """
     处理视频流并实时显示前景概率检测结果
@@ -127,6 +129,11 @@ def process_video_stream(foreground_hist_path, background_hist_path, camera_id=0
         display_original: 是否显示原始图像
         display_heatmap: 是否显示热图
         display_overlay: 是否显示叠加了热图的图像
+        display_canny: 是否显示Canny边缘检测结果
+        canny_threshold1: Canny边缘检测的第一个阈值（低阈值）
+        canny_threshold2: Canny边缘检测的第二个阈值（高阈值）
+        display_contour: 是否显示轮廓检测结果
+        contour_threshold_percentile: 轮廓检测的百分位数阈值（默认90%）
         resize_width: 调整视频帧宽度
         resize_height: 调整视频帧高度
         alpha: 热图透明度
@@ -194,6 +201,85 @@ def process_video_stream(foreground_hist_path, background_hist_path, camera_id=0
             cv2.putText(overlayed_image, "Overlay", (10, 60), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.imshow("Overlay", overlayed_image)
+            
+        if display_canny:
+            # 将probability_map从float32 (0-1)转换为uint8 (0-255)以便进行Canny边缘检测
+            # probability_uint8 = (probability_map * 255).astype(np.uint8)
+            probability_uint8 = frame
+            # 应用Canny边缘检测
+            edges = cv2.Canny(probability_uint8, canny_threshold1, canny_threshold2)
+            
+            # 将边缘图像转换为彩色以便添加文本
+            edges_colored = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+            
+            # 添加信息文本
+            cv2.putText(edges_colored, f"Threshold1: {canny_threshold1}", (10, 30), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(edges_colored, f"Threshold2: {canny_threshold2}", (10, 60), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(edges_colored, "Canny Edge Detection", (10, 90), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # 显示Canny边缘检测结果
+            cv2.imshow("Canny Edge Detection", edges_colored)
+        
+        if display_contour:
+            # 使用百分位数计算二值化阈值
+            threshold_value = np.percentile(probability_map, contour_threshold_percentile)
+            
+            # 二值化处理
+            binary_mask = (probability_map > threshold_value).astype(np.uint8) * 255
+            
+            # 查找轮廓
+            contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # 计算每个轮廓的面积并按面积排序（降序）
+            contours_with_area = [(cnt, cv2.contourArea(cnt)) for cnt in contours]
+            contours_with_area.sort(key=lambda x: x[1], reverse=True)
+            
+            # 只保留面积最大的前5个轮廓
+            max_contours_to_show = 5
+            largest_contours = [cnt for cnt, area in contours_with_area[:max_contours_to_show]]
+            largest_areas = [area for cnt, area in contours_with_area[:max_contours_to_show]]
+            
+            # 创建轮廓显示图像
+            contour_image = frame.copy()
+            
+            # 绘制前5个最大面积的轮廓
+            if largest_contours:
+                cv2.drawContours(contour_image, largest_contours, -1, (0, 255, 0), 2)
+                
+                # 在最大的轮廓上显示其面积和中心圆形
+                if largest_areas:
+                    cnt = largest_contours[0]
+                    area = largest_areas[0]
+                    # 计算轮廓的边界矩形
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    # 在轮廓附近显示面积
+                    cv2.putText(contour_image, f"Largest Area: {area:.1f}", 
+                                (x, max(0, y - 10)), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+                    
+                    # 计算轮廓的中心坐标
+                    M = cv2.moments(cnt)
+                    if M['m00'] != 0:
+                        cx = int(M['m10'] / M['m00'])
+                        cy = int(M['m01'] / M['m00'])
+                        # 在轮廓中心绘制红色圆形
+                        cv2.circle(contour_image, (cx, cy), 5, (0, 0, 255), -1)  # 红色圆形，半径5像素
+            
+            # 添加信息
+            cv2.putText(contour_image, f"Threshold: {threshold_value:.3f}", (10, 30), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(contour_image, f"Total Contours: {len(contours)}", (10, 60), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(contour_image, f"Showing Top {min(max_contours_to_show, len(contours))}", (10, 90), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(contour_image, "Object Contours", (10, 120), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # 显示轮廓检测结果
+            cv2.imshow("Object Contours", contour_image)
         
         # 等待按键事件
         key = cv2.waitKey(1) & 0xFF
@@ -220,6 +306,11 @@ def main():
     display_original = True  # 显示原始图像
     display_heatmap = True   # 显示热图
     display_overlay = True   # 显示叠加图像
+    display_canny = True     # 显示Canny边缘检测
+    canny_threshold1 = 50    # Canny低阈值
+    canny_threshold2 = 150   # Canny高阈值
+    display_contour = True   # 显示轮廓检测
+    contour_threshold_percentile = 90  # 轮廓阈值百分位数
     resize_width = 640       # 调整宽度以提高处理速度
     resize_height = 480      # 调整高度以提高处理速度
     alpha = 0.6              # 热图透明度
@@ -233,6 +324,11 @@ def main():
             display_original=display_original,
             display_heatmap=display_heatmap,
             display_overlay=display_overlay,
+            display_canny=display_canny,
+            canny_threshold1=canny_threshold1,
+            canny_threshold2=canny_threshold2,
+            display_contour=display_contour,
+            contour_threshold_percentile=contour_threshold_percentile,
             resize_width=resize_width,
             resize_height=resize_height,
             alpha=alpha
